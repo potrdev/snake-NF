@@ -14,6 +14,12 @@ clock = pg.time.Clock()
 
 font = pg.font.Font(None, 36)
 
+# Load sounds
+collect_sound = pg.mixer.Sound("collect.mp3")
+bg_music = pg.mixer.Sound("music.mp3")
+bg_music.play(-1)  # Play background music in a loop
+bg_music.set_volume(0.2)
+
 class SnakePart:
     def __init__(self, x, y):
         self.x = x
@@ -29,7 +35,7 @@ class Snake:
     def __init__(self, x, y):
         self.parts = [SnakePart(x, y)]
         self.direction = "R"
-        self.growing = False  # Track if the snake is growing
+        self.growing = False
 
     def move(self):
         head_x = self.parts[0].x
@@ -46,11 +52,10 @@ class Snake:
 
         self.parts.insert(0, SnakePart(head_x, head_y))
 
-        # Only remove the last part if not growing
         if not self.growing:
             self.parts.pop()
         else:
-            self.growing = False  # Reset growing status after growing
+            self.growing = False
 
     def change_direction(self, new_direction):
         if (self.direction == "L" and new_direction != "R") or \
@@ -60,32 +65,37 @@ class Snake:
             self.direction = new_direction
 
     def grow(self):
-        self.growing = True  # Set growing status to True
+        self.growing = True
 
     def update_colors(self):
         for i in range(len(self.parts)):
             if i == 0 or i % 2 == 0:
-                self.parts[i].color = (0, 200, 0)
+                self.parts[i].color = (0, 180, 0)
             else:
                 self.parts[i].color = (0, 255, 0)
 
     def check_collision(self):
         head = self.parts[0]
-        # Check if the snake collides with itself
         for part in self.parts[1:]:
             if head.x == part.x and head.y == part.y:
                 return True
         return False
 
+    def reset(self, x, y):
+        self.parts = [SnakePart(x, y)]
+        self.direction = "R"
+        self.growing = False
+
+def spawn_food(snake_parts):
+    while True:
+        food_x = random.randint(0, (WIN_X - SNAKE_SIZE) // SNAKE_SIZE) * SNAKE_SIZE
+        food_y = random.randint(0, (WIN_Y - SNAKE_SIZE) // SNAKE_SIZE) * SNAKE_SIZE
+        if all(part.x != food_x or part.y != food_y for part in snake_parts):
+            return food_x, food_y
+
 snake = Snake(0, 0)
 score = 0
-
-# Initialize food positions
-food_positions = []
-for _ in range(1):  # Start with one apple
-    food_x = random.randint(0, (WIN_X - SNAKE_SIZE) // SNAKE_SIZE) * SNAKE_SIZE
-    food_y = random.randint(0, (WIN_Y - SNAKE_SIZE) // SNAKE_SIZE) * SNAKE_SIZE
-    food_positions.append((food_x, food_y))
+food_positions = [spawn_food(snake.parts)]
 
 running = True
 game_over = False
@@ -107,24 +117,20 @@ while running:
 
         snake.move()
 
-        # Check for food collision
         for food in food_positions:
             if snake.parts[0].x == food[0] and snake.parts[0].y == food[1]:
                 snake.grow()
-                score += 1  # Increment score
-                # Spawn two new apples
-                for _ in range(2):
-                    new_food_x = random.randint(0, (WIN_X - SNAKE_SIZE) // SNAKE_SIZE) * SNAKE_SIZE
-                    new_food_y = random.randint(0, (WIN_Y - SNAKE_SIZE) // SNAKE_SIZE) * SNAKE_SIZE
-                    food_positions.append((new_food_x, new_food_y))
-                food_positions.remove(food)  # Remove the eaten apple
+                score += 1
+                collect_sound.play()  # Play collect sound
+                food_positions.append(spawn_food(snake.parts))  # Spawn new food
+                food_positions.remove(food)
                 break
 
         if snake.check_collision() or \
            snake.parts[0].x < 0 or snake.parts[0].x >= WIN_X or \
            snake.parts[0].y < 0 or snake.parts[0].y >= WIN_Y:
             game_over = True
-        
+
         snake.update_colors()
 
         for i in range(0, WIN_Y // SNAKE_SIZE * 2):
@@ -144,8 +150,17 @@ while running:
     else:
         game_over_text = font.render("GAME OVER", True, (255, 0, 0))
         score_display = font.render(f"Final Score: {score}", True, (255, 255, 255))
+        retry_text = font.render("Press R to Retry", True, (255, 255, 255))
         screen.blit(game_over_text, (WIN_X // 2 - game_over_text.get_width() // 2, WIN_Y // 2 - 20))
         screen.blit(score_display, (WIN_X // 2 - score_display.get_width() // 2, WIN_Y // 2 + 20))
+        screen.blit(retry_text, (WIN_X // 2 - retry_text.get_width() // 2, WIN_Y // 2 + 60))
+
+        keys = pg.key.get_pressed()
+        if keys[pg.K_r]:  # Retry the game
+            snake.reset(0, 0)
+            score = 0
+            food_positions = [spawn_food(snake.parts)]
+            game_over = False
 
     clock.tick(FPS)
     pg.display.flip()
